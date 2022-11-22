@@ -6,9 +6,10 @@ mod tracing_config;
 
 use eyre::Result;
 
-async fn add_new_cert() {}
-
-async fn check_cert_renewal() {}
+pub struct Certificate {
+    pub cert: String,
+    pub key: String,
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
