@@ -16,17 +16,17 @@ impl VercelDnsCreds {
         Ok(VercelDnsCreds { token })
     }
 
-    pub fn from_console() -> Result<VercelDnsCreds> {
+    pub fn from_console() -> Result<Option<VercelDnsCreds>> {
         let token: String = dialoguer::Input::new()
             .with_prompt("Vercel API token (or blank to use $VERCEL_TOKEN)")
             .allow_empty(true)
-            .interact()?;
+            .interact_text()?;
 
         if token.is_empty() {
-            return VercelDnsCreds::from_env();
+            Ok(None)
+        } else {
+            Ok(Some(VercelDnsCreds { token }))
         }
-
-        Ok(VercelDnsCreds { token })
     }
 }
 

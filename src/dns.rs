@@ -1,31 +1,15 @@
 pub mod vercel;
 
-use std::str::FromStr;
+use serde::Serialize;
+use std::{fmt::Display, str::FromStr};
+use strum::{Display, EnumIter, EnumString, EnumVariantNames};
 
 use async_trait::async_trait;
 use eyre::{eyre, Result};
 
+#[derive(Debug, Display, EnumIter, EnumString, EnumVariantNames)]
 pub enum DnsProviderType {
     Vercel,
-}
-
-impl ToString for DnsProviderType {
-    fn to_string(&self) -> String {
-        match self {
-            DnsProviderType::Vercel => "Vercel".to_string(),
-        }
-    }
-}
-
-impl FromStr for DnsProviderType {
-    type Err = eyre::Report;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Vercel" => Ok(DnsProviderType::Vercel),
-            _ => Err(eyre!("Invalid DNS provider")),
-        }
-    }
 }
 
 #[async_trait]

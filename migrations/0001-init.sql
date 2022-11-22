@@ -1,26 +1,36 @@
 CREATE TABLE acme_accounts (
-  name text not null primary key,
-  creds text not null,
+  id INTEGER PRIMARY KEY,
+  provider text not null,
+  name text not null,
+  creds text not null
 );
 
-CREATE TABLE dns_provider (
-  name text not null primary key,
-  host text not null,
-  creds text not null,
+CREATE UNIQUE INDEX acme_accounts_name ON acme_accounts (name);
+
+CREATE TABLE dns_providers (
+  id INTEGER PRIMARY KEY,
+  name text not null,
+  provider text not null,
+  creds text
 );
+
+CREATE UNIQUE INDEX dns_provider_name ON dns_providers (name);
 
 CREATE TABLE endpoints (
-  name text not null primary key,
-  host text not null,
-  details text not null,
+  id INTEGER PRIMARY KEY,
+  name text not null,
+  provider text not null,
+  creds text not null
 );
+
+CREATE UNIQUE INDEX endpoints_name ON endpoints (name);
 
 CREATE TABLE subdomains (
   subdomain text not null primary key,
-  dns_provider text not null references dns_provider (name),
-  endpoint text not null references endpoints (name),
+  dns_provider bigint not null references dns_providers (id),
+  endpoint bigint not null references endpoints (id),
   last_cert text,
   expires bigint
 );
 
-CREATE INDEX ON subdomains(expires);
+CREATE INDEX subdomains_expires ON subdomains(expires);

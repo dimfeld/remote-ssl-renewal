@@ -19,17 +19,17 @@ impl DigitalOceanCreds {
         Ok(DigitalOceanCreds { token })
     }
 
-    pub fn from_console() -> Result<DigitalOceanCreds> {
+    pub fn from_console() -> Result<Option<DigitalOceanCreds>> {
         let token: String = dialoguer::Input::new()
             .with_prompt("DigitalOcean API token (or blank to use $DIGITAL_OCEAN_TOKEN)")
             .allow_empty(true)
             .interact()?;
 
         if token.is_empty() {
-            return DigitalOceanCreds::from_env();
+            Ok(None)
+        } else {
+            Ok(Some(DigitalOceanCreds { token }))
         }
-
-        Ok(DigitalOceanCreds { token })
     }
 }
 
