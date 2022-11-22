@@ -27,6 +27,7 @@ CREATE UNIQUE INDEX endpoints_name ON endpoints (name);
 
 CREATE TABLE subdomains (
   subdomain text not null primary key,
+  acme_account bigint not null references acme_accounts(id),
   dns_provider bigint not null references dns_providers (id),
   endpoint bigint not null references endpoints (id),
   last_cert text,

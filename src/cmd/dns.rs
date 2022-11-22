@@ -21,12 +21,12 @@ pub struct DnsArgs {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    #[clap(about = "Add a new DNS provider")]
+    /// Add a new DNS provider
     New,
 }
 
 pub async fn new_dns_provider(state: Arc<State>) -> Result<String> {
-    let name = get_unique_name(&state, "dns provider", "dns_providers").await?;
+    let name = get_unique_name(&state, "Give this DNS provider a label", "dns_providers").await?;
 
     let selection = dialoguer::Select::new()
         .with_prompt("What DNS provider do you want to use?")

@@ -3,15 +3,10 @@ use std::sync::Arc;
 
 use crate::{cmd::State, db::PoolExtInteract};
 
-pub async fn get_unique_name(
-    state: &Arc<State>,
-    name_type: &str,
-    sql_table: &str,
-) -> Result<String> {
-    let prompt = format!("Give this {name_type} a name");
+pub async fn get_unique_name(state: &Arc<State>, prompt: &str, sql_table: &str) -> Result<String> {
     loop {
         let potential_name: String = dialoguer::Input::new()
-            .with_prompt(&prompt)
+            .with_prompt(prompt)
             .interact_text()?;
 
         // Better to use dialoguer's validate functionality but this is easier for MVP

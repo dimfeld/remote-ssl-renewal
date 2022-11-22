@@ -1,3 +1,4 @@
+mod acme;
 mod cli;
 mod cmd;
 mod db;

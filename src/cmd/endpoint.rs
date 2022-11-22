@@ -27,10 +27,10 @@ enum Commands {
 }
 
 pub async fn new_endpoint(state: Arc<State>) -> Result<String> {
-    let name = get_unique_name(&state, "endpoint", "endpoints").await?;
+    let name = get_unique_name(&state, "Give this host a label", "endpoints").await?;
 
     let selection = dialoguer::Select::new()
-        .with_prompt("What endpoint provider are you using?")
+        .with_prompt("What host provider are you using?")
         .items(EndpointProviderType::VARIANTS)
         .interact()?;
     let endpoint_type = EndpointProviderType::iter().nth(selection).unwrap();

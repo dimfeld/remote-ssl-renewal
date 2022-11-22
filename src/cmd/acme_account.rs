@@ -4,8 +4,9 @@ use clap::{Args, Subcommand};
 use eyre::Result;
 use indicatif::ProgressBar;
 use rusqlite::params;
+use strum::{IntoEnumIterator, VariantNames};
 
-use crate::db::PoolExtInteract;
+use crate::{acme::AcmeProvider, db::PoolExtInteract};
 
 use super::State;
 
@@ -27,10 +28,23 @@ struct Account {
 }
 
 pub async fn new_account(state: Arc<State>) -> Result<()> {
-    let name = crate::cli::get_unique_name(&state, "account", "acme_accounts").await?;
+    let name = crate::cli::get_unique_name(
+        &state,
+        "Give this ACME (Let's Encrypt) account a label",
+        "acme_accounts",
+    )
+    .await?;
+
+    let providers = AcmeProvider::iter().map(|p| p.label()).collect::<Vec<_>>();
+    let provider_select = dialoguer::Select::new()
+        .with_prompt("Which ACME provider do you want to use?")
+        .items(&providers)
+        .default(0)
+        .interact()?;
+    let provider = AcmeProvider::iter().nth(provider_select).unwrap();
 
     let email: String = dialoguer::Input::new()
-        .with_prompt("What email address should you use?")
+        .with_prompt("What email address should be on the account?")
         .interact_text()?;
 
     let progress = ProgressBar::new_spinner().with_message("Creating account...");
@@ -43,23 +57,18 @@ pub async fn new_account(state: Arc<State>) -> Result<()> {
             terms_of_service_agreed: true,
             only_return_existing: false,
         },
-        state.acme_url(),
+        provider.url(),
     )
     .await?;
 
     let creds = serde_json::to_string(&account.credentials())?;
-
-    let provider = match state.staging {
-        true => "lets_encrypt_staging",
-        false => "lets_encrypt",
-    };
 
     state
         .pool
         .interact(move |conn| {
             conn.execute(
                 "INSERT INTO acme_accounts (name, provider, creds) VALUES (?, ?, ?)",
-                params![&name, provider, &creds],
+                params![&name, provider.as_ref(), &creds],
             )?;
 
             Ok::<_, eyre::Report>(())
