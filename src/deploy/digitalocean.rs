@@ -92,8 +92,9 @@ impl DigitalOcean {
         let now = time::OffsetDateTime::now_utc();
         let payload = json!({
             "name": format!("{}-{now}", self.subdomain),
+            "type": "custom",
             "private_key": cert.key,
-            "leaf_certificate": cert.cert,
+            "leaf_certificate": cert.get_leaf_certificate(),
             "certificate_chain": cert.cert,
         });
 

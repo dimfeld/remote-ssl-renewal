@@ -17,6 +17,12 @@ pub struct Certificate {
     pub key: String,
 }
 
+impl Certificate {
+    pub fn get_leaf_certificate(&self) -> &str {
+        self.cert.split("-----END CERTIFICATE-----").next().unwrap()
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     color_eyre::install()?;
