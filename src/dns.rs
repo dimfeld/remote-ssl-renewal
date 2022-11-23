@@ -13,7 +13,7 @@ pub enum DnsProviderType {
 }
 
 #[async_trait]
-pub trait DnsProvider {
+pub trait DnsProvider: Send + Sync {
     async fn add_challenge_record(&mut self, key: &str, value: &str) -> Result<()>;
     async fn cleanup(&self) -> Result<()>;
 }

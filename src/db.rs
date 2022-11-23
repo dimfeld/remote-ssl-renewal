@@ -1,10 +1,12 @@
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use deadpool_sqlite::{Hook, HookError, HookErrorCause};
 use eyre::Result;
 use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
+
+use crate::cmd::State;
 
 const MIGRATIONS: [&str; 1] = [include_str!("../migrations/0001-init.sql")];
 
@@ -102,4 +104,61 @@ where
             .unwrap()?;
         Ok(result)
     }
+}
+
+pub struct DbObject {
+    pub id: i64,
+    pub name: String,
+    pub provider: String,
+    pub creds: String,
+}
+
+impl DbObject {
+    fn from_row(row: &rusqlite::Row) -> Result<Self, rusqlite::Error> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            provider: row.get(2)?,
+            creds: row.get(3)?,
+        })
+    }
+}
+
+pub struct DbObjects {
+    pub acme_accounts: Vec<DbObject>,
+    pub dns_providers: Vec<DbObject>,
+    pub endpoints: Vec<DbObject>,
+}
+
+pub async fn get_all_objects(state: &Arc<State>) -> Result<DbObjects> {
+    state
+        .pool
+        .interact(|conn| {
+            let mut stmt = conn.prepare_cached(
+                "SELECT id, name, provider, creds FROM acme_accounts ORDER BY name",
+            )?;
+            let acme_accounts = stmt
+                .query_map([], DbObject::from_row)?
+                .collect::<Result<Vec<DbObject>, _>>()?;
+
+            let mut stmt = conn.prepare_cached(
+                "SELECT id, name, provider, creds FROM dns_providers ORDER BY name",
+            )?;
+            let dns_providers = stmt
+                .query_map([], DbObject::from_row)?
+                .collect::<Result<Vec<DbObject>, _>>()?;
+
+            let mut stmt = conn
+                .prepare_cached("SELECT id, name, provider, creds FROM endpoints ORDER BY name")?;
+            let endpoints = stmt
+                .query_map([], DbObject::from_row)?
+                .collect::<Result<Vec<DbObject>, _>>()?;
+
+            Ok(DbObjects {
+                acme_accounts,
+                dns_providers,
+                endpoints,
+            })
+        })
+        .await
 }

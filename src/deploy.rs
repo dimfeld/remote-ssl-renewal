@@ -15,7 +15,7 @@ pub enum EndpointProviderType {
 }
 
 #[async_trait]
-pub trait DeployEndpoint {
+pub trait DeployEndpoint: Send + Sync {
     async fn deploy_certificate(&self, cert: Certificate, endpoint_must_exist: bool) -> Result<()>;
 }
 

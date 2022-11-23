@@ -9,7 +9,11 @@ use clap::{Args, Subcommand};
 use eyre::Result;
 use rusqlite::params;
 
-use crate::{db::PoolExtInteract, deploy::EndpointProviderType, dns::DnsProviderType};
+use crate::{
+    db::{DbObject, PoolExtInteract},
+    deploy::EndpointProviderType,
+    dns::DnsProviderType,
+};
 
 use super::State;
 
@@ -44,44 +48,39 @@ pub async fn run(state: Arc<State>, args: SubdomainArgs) -> Result<()> {
     Ok(())
 }
 
-pub struct DbObject {
-    pub id: String,
-    pub name: String,
-    pub provider: String,
-    pub creds: String,
-}
-
-impl DbObject {
-    fn from_row(row: &rusqlite::Row) -> Result<Self, rusqlite::Error> {
-        Ok(Self {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            provider: row.get(2)?,
-            creds: row.get(3)?,
-        })
-    }
-}
-
-async fn start_cert_process(
-    state: Arc<State>,
+pub struct Renewal {
     subdomain: String,
-    account_obj: DbObject,
-    dns_provider: DbObject,
-    endpoint: DbObject,
-) -> Result<()> {
-    let dns_provider_type = DnsProviderType::from_str(&dns_provider.provider)?;
-    let dns_provider =
-        crate::dns::get_dns_provider(dns_provider_type, &subdomain, dns_provider.creds)?;
+    acme_provider: String,
+    acme_creds: String,
+    dns_provider: String,
+    dns_creds: String,
+    endpoint_provider: String,
+    endpoint_creds: String,
+}
 
-    let acme_creds = serde_json::from_str::<instant_acme::AccountCredentials>(&account_obj.creds)?;
+async fn start_cert_process(state: Arc<State>, renewal: Renewal) -> Result<()> {
+    let Renewal {
+        subdomain,
+        acme_creds,
+        dns_provider,
+        dns_creds,
+        endpoint_provider,
+        endpoint_creds,
+        ..
+    } = renewal;
+
+    let dns_provider_type = DnsProviderType::from_str(&dns_provider)?;
+    let dns_provider = crate::dns::get_dns_provider(dns_provider_type, &subdomain, dns_creds)?;
+
+    let acme_creds = serde_json::from_str::<instant_acme::AccountCredentials>(&acme_creds)?;
     let account = instant_acme::Account::from_credentials(acme_creds)?;
 
-    let deployer_type = EndpointProviderType::from_str(&endpoint.provider)?;
+    let deployer_type = EndpointProviderType::from_str(&endpoint_provider)?;
     let deployer = crate::deploy::create_deployer(
         state.clone(),
         deployer_type,
         subdomain.clone(),
-        endpoint.creds,
+        endpoint_provider,
     )?;
 
     let (cert, expires) =
