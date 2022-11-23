@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use clap::{Args, Subcommand};
-use eyre::{eyre, Result};
+use eyre::Result;
 use rusqlite::params;
-use serde::Deserialize;
 use strum::{IntoEnumIterator, VariantNames};
 
 use crate::{

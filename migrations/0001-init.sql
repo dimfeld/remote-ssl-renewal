@@ -1,7 +1,7 @@
 CREATE TABLE acme_accounts (
   id INTEGER PRIMARY KEY,
-  provider text not null,
   name text not null,
+  provider text not null,
   creds text not null
 );
 
@@ -11,7 +11,7 @@ CREATE TABLE dns_providers (
   id INTEGER PRIMARY KEY,
   name text not null,
   provider text not null,
-  creds text
+  creds text not null
 );
 
 CREATE UNIQUE INDEX dns_provider_name ON dns_providers (name);
@@ -31,7 +31,8 @@ CREATE TABLE subdomains (
   dns_provider bigint not null references dns_providers (id),
   endpoint bigint not null references endpoints (id),
   last_cert text,
-  expires bigint
+  expires bigint,
+  enabled boolean not null default true
 );
 
 CREATE INDEX subdomains_expires ON subdomains(expires);

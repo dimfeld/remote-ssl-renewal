@@ -11,6 +11,15 @@ pub struct VercelDnsCreds {
 }
 
 impl VercelDnsCreds {
+    pub fn from_string_or_env(creds: String) -> Result<VercelDnsCreds> {
+        if creds.is_empty() {
+            Self::from_env()
+        } else {
+            let creds: Self = serde_json::from_str(&creds)?;
+            Ok(creds)
+        }
+    }
+
     pub fn from_env() -> Result<VercelDnsCreds> {
         let token = std::env::var("VERCEL_TOKEN")?;
         Ok(VercelDnsCreds { token })
@@ -43,18 +52,11 @@ struct AddRecordResponse {
 }
 
 impl VercelDns {
-    pub fn new(creds: Option<VercelDnsCreds>, domain: String) -> Result<VercelDns> {
-        let creds = match creds {
-            Some(creds) => creds,
-            None => VercelDnsCreds::from_env()?,
-        };
-
+    pub fn new(creds: VercelDnsCreds, domain: String) -> Result<VercelDns> {
         Ok(VercelDns {
             creds,
             domain,
-            client: Client::builder()
-                .user_agent("remote-ssl-renewal/0.1.0")
-                .build()?,
+            client: Client::builder().user_agent(crate::USER_AGENT).build()?,
             record_id: None,
         })
     }

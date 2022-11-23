@@ -4,7 +4,7 @@ use clap::{Args, Subcommand};
 use eyre::Result;
 use indicatif::ProgressBar;
 use rusqlite::params;
-use strum::{IntoEnumIterator, VariantNames};
+use strum::IntoEnumIterator;
 
 use crate::{acme::AcmeProvider, db::PoolExtInteract};
 
@@ -20,11 +20,6 @@ pub struct AccountArgs {
 enum Commands {
     #[clap(about = "Add a new account")]
     New,
-}
-
-struct Account {
-    name: String,
-    email: String,
 }
 
 pub async fn new_account(state: Arc<State>) -> Result<()> {
@@ -47,7 +42,9 @@ pub async fn new_account(state: Arc<State>) -> Result<()> {
         .with_prompt("What email address should be on the account?")
         .interact_text()?;
 
-    let progress = ProgressBar::new_spinner().with_message("Creating account...");
+    let progress = state
+        .progress
+        .add(ProgressBar::new_spinner().with_message("Creating account..."));
 
     let email = format!("mailto:{}", email);
 

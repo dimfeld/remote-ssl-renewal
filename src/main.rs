@@ -7,7 +7,11 @@ mod dns;
 mod tracing_config;
 
 use eyre::Result;
+use serde::{Deserialize, Serialize};
 
+pub const USER_AGENT: &str = concat!("remote-ssl-renewal/", env!("CARGO_PKG_VERSION"));
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Certificate {
     pub cert: String,
     pub key: String,

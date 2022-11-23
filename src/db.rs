@@ -2,7 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use async_trait::async_trait;
 use deadpool_sqlite::{Hook, HookError, HookErrorCause};
-use eyre::{eyre, Result};
+use eyre::Result;
 use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 
