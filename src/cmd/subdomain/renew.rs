@@ -32,7 +32,7 @@ async fn renew_any_needed(state: Arc<State>) -> Result<()> {
         .interact(move |conn| {
             let mut stmt = conn.prepare_cached(
                 r##"
-            SELECT sd.subdomain,
+            SELECT sd.name,
                 aa.provider as acme_provider,
                 aa.creds as acme_creds,
                 dp.provider as dns_provider,
@@ -111,11 +111,11 @@ async fn renew_one_cmd(state: Arc<State>, subdomain: String, force: bool) -> Res
             JOIN acme_accounts aa ON aa.id=sd.acme_account
             JOIN dns_providers dp ON dp.id=sd.dns_provider
             JOIN endpoints ep ON ep.id=sd.endpoint
-            WHERE sd.subdomain = ?
+            WHERE sd.name = ?
         "##,
             )?;
 
-            let renewal: (Renewal, i64) = stmt.query_row([subdomain.clone()], |row| {
+            let renewal: (Renewal, Option<i64>) = stmt.query_row([subdomain.clone()], |row| {
                 Ok((
                     Renewal {
                         subdomain,
@@ -134,7 +134,7 @@ async fn renew_one_cmd(state: Arc<State>, subdomain: String, force: bool) -> Res
         })
         .await?;
 
-    if expires < renewal_threshold() || force {
+    if expires.unwrap_or(0) < renewal_threshold() || force {
         start_cert_process(state, renewal).await?;
     } else {
         println!("Certificate is not due for renewal yet");

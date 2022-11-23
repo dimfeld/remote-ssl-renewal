@@ -43,7 +43,6 @@ pub struct VercelDns {
     creds: VercelDnsCreds,
     domain: String,
     client: reqwest::Client,
-    record_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -57,14 +56,13 @@ impl VercelDns {
             creds,
             domain,
             client: Client::builder().user_agent(crate::USER_AGENT).build()?,
-            record_id: None,
         })
     }
 }
 
 #[async_trait]
 impl DnsProvider for VercelDns {
-    async fn add_challenge_record(&mut self, key: &str, value: &str) -> Result<()> {
+    async fn add_challenge_record(&self, key: &str, value: &str) -> Result<String> {
         let url = format!("https://api.vercel.com/v2/domains/{}/records", self.domain);
         let body = serde_json::json!({
             "name": key,
@@ -88,17 +86,10 @@ impl DnsProvider for VercelDns {
 
         let response: AddRecordResponse = res.json().await?;
 
-        self.record_id = Some(response.uid);
-
-        Ok(())
+        Ok(response.uid)
     }
 
-    async fn cleanup(&self) -> Result<()> {
-        let record_id = match self.record_id.as_ref() {
-            Some(r) => r,
-            None => return Ok(()),
-        };
-
+    async fn cleanup(&self, record_id: &str) -> Result<()> {
         let url = format!(
             "https://api.vercel.com/v2/domains/{}/records/{}",
             self.domain, record_id

@@ -19,7 +19,10 @@ pub struct Certificate {
 
 impl Certificate {
     pub fn get_leaf_certificate(&self) -> &str {
-        self.cert.split("-----END CERTIFICATE-----").next().unwrap()
+        self.cert
+            .split_inclusive("-----END CERTIFICATE-----\n")
+            .next()
+            .unwrap()
     }
 }
 

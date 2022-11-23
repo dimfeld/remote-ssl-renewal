@@ -63,24 +63,24 @@ pub async fn run(state: Arc<State>, args: EditArgs) -> Result<()> {
     let new_dns_provider_idx = dialoguer::Select::new()
         .items(
             &objects
-                .acme_accounts
+                .dns_providers
                 .iter()
                 .map(|i| i.name.as_str())
                 .collect::<Vec<_>>(),
         )
-        .with_prompt("Select an ACME account")
+        .with_prompt("Select a DNS provider")
         .default(active_dns_provider_idx)
         .interact()?;
 
     let new_endpoint_idx = dialoguer::Select::new()
         .items(
             &objects
-                .acme_accounts
+                .endpoints
                 .iter()
                 .map(|i| i.name.as_str())
                 .collect::<Vec<_>>(),
         )
-        .with_prompt("Select an ACME account")
+        .with_prompt("Select a host")
         .default(active_endpoint_idx)
         .interact()?;
 

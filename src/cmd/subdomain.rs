@@ -80,7 +80,7 @@ async fn start_cert_process(state: Arc<State>, renewal: Renewal) -> Result<()> {
         state.clone(),
         deployer_type,
         subdomain.clone(),
-        endpoint_provider,
+        endpoint_creds,
     )?;
 
     let (cert, expires) =

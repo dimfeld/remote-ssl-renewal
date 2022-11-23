@@ -1,11 +1,12 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use eyre::{eyre, Result};
 use indicatif::ProgressBar;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use time::macros::format_description;
 
 use crate::{cmd::State, Certificate};
 
@@ -48,6 +49,7 @@ impl DigitalOceanCreds {
 #[derive(Deserialize)]
 struct DOCertificate {
     id: String,
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -56,13 +58,23 @@ struct DOCertificateResponse {
 }
 
 #[derive(Deserialize)]
+struct DOCertificatesResponse {
+    certificates: Vec<DOCertificate>,
+}
+
+#[derive(Debug, Deserialize)]
 struct DOEndpoint {
     id: String,
     // origin: String,
     // endpoint: String,
-    // ttl: u16,
+    ttl: u16,
     certificate_id: String,
     custom_domain: String,
+}
+
+#[derive(Deserialize)]
+struct DOEndpointResponse {
+    endpoint: DOEndpoint,
 }
 
 #[derive(Deserialize)]
@@ -90,12 +102,14 @@ impl DigitalOcean {
     /// Upload the certificate and return its ID.
     async fn upload_certificate(&self, cert: Certificate) -> Result<String> {
         let now = time::OffsetDateTime::now_utc();
+        let formatter = format_description!("[year]-[month]-[day]-[hour]-[minute]-[second]");
         let payload = json!({
-            "name": format!("{}-{now}", self.subdomain),
+            "name": format!("{}-{}", self.subdomain, now.format(&formatter)?),
             "type": "custom",
             "private_key": cert.key,
             "leaf_certificate": cert.get_leaf_certificate(),
-            "certificate_chain": cert.cert,
+            // DO doesn't like the double newline.
+            "certificate_chain": cert.cert.replace("\n\n", "\n"),
         });
 
         let response = self
@@ -104,23 +118,78 @@ impl DigitalOcean {
             .bearer_auth(&self.creds.token)
             .json(&payload)
             .send()
-            .await?
-            .error_for_status()?
-            .json::<DOCertificateResponse>()
             .await?;
 
-        Ok(response.certificate.id)
+        let status = response.status();
+        if status.is_success() {
+            let result = response.json::<DOCertificateResponse>().await?;
+            Ok(result.certificate.id)
+        } else if status == StatusCode::UNPROCESSABLE_ENTITY {
+            // DO doesn't let you upload a cert that it already knows about, and this can happen if
+            // a command failed halfway through an you're trying to force a reinstall. Handle this
+            // case here.
+            let body = response.text().await?;
+            let same_sha =
+                regex::Regex::new(r"found certificate (.*) with the same SHA-1 fingerprint")?;
+            if let Some(captures) = same_sha.captures(&body) {
+                let name = captures.get(1).unwrap().as_str();
+                self.get_certificate_by_name(name).await?.ok_or_else(|| {
+                    eyre!(
+                        "Certificate with name {} already exists, but we couldn't find it",
+                        name
+                    )
+                })
+            } else {
+                Err(eyre!("Failed to upload certificate: {status} {body}"))
+            }
+        } else {
+            let body = response.text().await?;
+            Err(eyre!("failed to upload certificate: {status} {body}"))
+        }
+    }
+
+    async fn get_certificate_by_name(&self, name: &str) -> Result<Option<String>> {
+        let mut page = 1;
+        loop {
+            let certs = self
+                .client
+                .get("https://api.digitalocean.com/v2/certificates")
+                .query(&[("page", page)])
+                .bearer_auth(&self.creds.token)
+                .send()
+                .await?
+                .json::<DOCertificatesResponse>()
+                .await?;
+
+            if certs.certificates.is_empty() {
+                return Ok(None);
+            }
+
+            let found_cert = certs
+                .certificates
+                .into_iter()
+                .find(|cert| cert.name == name);
+
+            if let Some(cert) = found_cert {
+                return Ok(Some(cert.id));
+            }
+
+            page += 1;
+        }
     }
 
     async fn set_endpoint_cert(&self, endpoint: &DOEndpoint, cert_id: &str) -> Result<()> {
-        // Update the endpoint to use the cert
+        // Update the endpoint to use the cert. Although we're only changing the certificate,
+        // we have to pass all the other fields too or it silently fails.
         let payload = json!({
             "certificate_id": cert_id,
+            "custom_domain": endpoint.custom_domain,
+            "ttl": endpoint.ttl
         });
 
         self.client
             .put(format!(
-                "https://api.digitalocean.com/v2/endpoints/{}",
+                "https://api.digitalocean.com/v2/cdn/endpoints/{}",
                 endpoint.id
             ))
             .bearer_auth(&self.creds.token)
@@ -150,7 +219,7 @@ impl DigitalOcean {
         let origin: String = {
             let _hider = self.state.hide_progress();
             dialoguer::Input::new()
-                .with_prompt("Enter the Spaces origin FQDN for this endpoint")
+                .with_prompt("Enter the Spaces origin FQDN for this endpoint. This can be found in the Digital Ocean Spaces configuration")
                 .interact_text()?
         };
 
@@ -164,9 +233,10 @@ impl DigitalOcean {
             .state
             .progress
             .add(ProgressBar::new_spinner().with_message("Creating endpoint"));
+        progress.enable_steady_tick(Duration::from_millis(125));
 
         self.client
-            .post("https://api.digitalocean.com/v2/endpoints")
+            .post("https://api.digitalocean.com/v2/cdn/endpoints")
             .bearer_auth(&self.creds.token)
             .json(&payload)
             .send()
@@ -179,12 +249,12 @@ impl DigitalOcean {
     }
 
     async fn find_existing_endpoint(&self) -> Result<Option<DOEndpoint>> {
-        let mut page = 0;
+        let mut page = 1;
         loop {
             let result = self
                 .client
                 .get(format!(
-                    "https://api.digitalocean.com/v2/endpoints?page={page}&per_page=200",
+                    "https://api.digitalocean.com/v2/cdn/endpoints?page={page}&per_page=200",
                 ))
                 .bearer_auth(&self.creds.token)
                 .send()
@@ -223,10 +293,14 @@ impl DeployEndpoint for DigitalOcean {
                 .state
                 .progress
                 .add(ProgressBar::new_spinner().with_message("Uploading certificate"));
-            self.set_endpoint_cert(&endpoint, &cert_id).await?;
+            progress.enable_steady_tick(Duration::from_millis(125));
 
-            progress.set_message("Removing old certificate");
-            self.remove_cert(&endpoint.certificate_id).await?;
+            if endpoint.certificate_id != cert_id {
+                self.set_endpoint_cert(&endpoint, &cert_id).await?;
+
+                progress.set_message("Removing old certificate");
+                self.remove_cert(&endpoint.certificate_id).await?;
+            }
 
             progress.finish_with_message("Done");
         } else if endpoint_must_exist {

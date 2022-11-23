@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
-use eyre::{eyre, Result};
+use backoff::{future::retry, ExponentialBackoff, ExponentialBackoffBuilder};
+use eyre::{eyre, Report, Result};
 use indicatif::ProgressBar;
 use instant_acme::{
     AuthorizationStatus, ChallengeType, Identifier, LetsEncrypt, NewOrder, Order, OrderState,
@@ -39,7 +40,7 @@ impl AcmeProvider {
 
 pub async fn get_certificate(
     state: Arc<State>,
-    mut dns_provider: Box<dyn DnsProvider>,
+    dns_provider: Box<dyn DnsProvider>,
     acme_account: instant_acme::Account,
     subdomain: String,
 ) -> Result<(Certificate, i64)> {
@@ -49,7 +50,9 @@ pub async fn get_certificate(
             .with_message("Starting certificate process..."),
     );
 
-    let identifiers = vec![instant_acme::Identifier::Dns(subdomain)];
+    progress.enable_steady_tick(Duration::from_millis(125));
+
+    let identifiers = vec![instant_acme::Identifier::Dns(subdomain.clone())];
 
     let (mut order, state) = acme_account
         .new_order(&NewOrder {
@@ -80,15 +83,43 @@ pub async fn get_certificate(
         challenges.push((identifier, &challenge.url, response_value));
     }
 
+    let (config, mut options) = trust_dns_resolver::system_conf::read_system_conf()?;
+    options.cache_size = 0;
+    let resolver = trust_dns_resolver::TokioAsyncResolver::tokio(config, options)?;
+
     // We currently only support one identifier at a time. Future implementations should put each
     // of the challenges into a new task to process them concurrently, and use a MultiProgressBar
     // to track them on the console.
     for (identifier, challenge_url, response) in &challenges {
         progress.set_message("Creating DNS record");
-        let key = format!("_acme_challenge.{identifier}");
-        dns_provider.add_challenge_record(&key, response).await?;
+        let key = format!("_acme-challenge.{identifier}.");
+        let dns_record_id = dns_provider.add_challenge_record(&key, response).await?;
 
-        // TODO Do we need to wait for the propagation here?
+        progress.set_message("Waiting for DNS record to propagate");
+
+        let boff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_secs(2))
+            .with_max_interval(Duration::from_secs(60))
+            .with_max_elapsed_time(Some(Duration::from_secs(600)))
+            .build();
+
+        retry(boff, || async {
+            let response = resolver
+                .txt_lookup(&key)
+                .await
+                .map_err(|e| backoff::Error::transient(Report::from(e)))?;
+
+            if response.iter().next().is_some() {
+                Ok(())
+            } else {
+                Err(backoff::Error::transient(eyre!("DNS record not found")))
+            }
+        })
+        .await?;
+
+        progress
+            .set_message("DNS record found. Waiting additional time to make sure of propagation");
+        tokio::time::sleep(Duration::from_secs(15)).await;
 
         order.set_challenge_ready(challenge_url).await?;
 
@@ -114,14 +145,14 @@ pub async fn get_certificate(
             }
         };
 
-        dns_provider.cleanup().await?;
+        dns_provider.cleanup(&dns_record_id).await?;
 
         match result {
             Ok(state) => match state.status {
                 OrderStatus::Ready => {}
                 _ => {
                     progress.set_message("Challenge failed");
-                    return Err(eyre!("Challenge failed: {:?}", state.error));
+                    return Err(eyre!("Challenge failed: {:?}", state));
                 }
             },
             Err(e) => {
@@ -132,7 +163,7 @@ pub async fn get_certificate(
     }
 
     progress.set_message("Requesting certificate");
-    let identifiers = challenges.iter().map(|c| c.0.clone()).collect::<Vec<_>>();
+    let identifiers = vec![subdomain];
     let mut params = CertificateParams::new(identifiers);
     params.distinguished_name = DistinguishedName::new();
     let cert = rcgen::Certificate::from_params(params).unwrap();
