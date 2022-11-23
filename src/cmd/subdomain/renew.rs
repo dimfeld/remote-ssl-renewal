@@ -43,7 +43,7 @@ async fn renew_any_needed(state: Arc<State>) -> Result<()> {
             JOIN acme_accounts aa ON aa.id=sd.acme_account
             JOIN dns_providers dp ON dp.id=sd.dns_provider
             JOIN endpoints ep ON ep.id=sd.endpoint
-            WHERE sd.enabled AND sd.last_cert IS NOT NULL && sd.expires < ?
+            WHERE sd.enabled AND sd.last_cert IS NOT NULL AND sd.expires < ?
         "##,
             )?;
 
