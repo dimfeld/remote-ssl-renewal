@@ -23,7 +23,7 @@ pub struct RenewArgs {
 }
 
 fn renewal_threshold() -> i64 {
-    (OffsetDateTime::now_utc() + time::Duration::days(14)).unix_timestamp()
+    (OffsetDateTime::now_utc() + time::Duration::days(30)).unix_timestamp()
 }
 
 async fn renew_any_needed(state: Arc<State>) -> Result<()> {
