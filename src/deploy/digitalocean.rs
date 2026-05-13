@@ -109,7 +109,7 @@ impl DigitalOcean {
             "private_key": cert.key,
             "leaf_certificate": cert.get_leaf_certificate(),
             // DO doesn't like the double newline.
-            "certificate_chain": cert.cert.replace("\n\n", "\n"),
+            "certificate_chain": cert.get_certificate_chain().replace("\n\n", "\n"),
         });
 
         let response = self

@@ -24,6 +24,13 @@ impl Certificate {
             .next()
             .unwrap()
     }
+
+    pub fn get_certificate_chain(&self) -> &str {
+        self.cert
+            .split_once("-----END CERTIFICATE-----\n")
+            .map(|(_, chain)| chain)
+            .unwrap_or("")
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
